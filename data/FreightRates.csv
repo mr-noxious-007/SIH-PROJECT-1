@@ -1,0 +1,11 @@
+vessel_type,origin_port,destination_port,rate_usd_per_ton,date,trend,predicted_rate_7day,predicted_rate_30day,confidence_score,source
+Supramax,Australia,Paradip,9.50,2024-06-01,Falling,9.30,8.80,85,Market Data
+Supramax,Australia,Paradip,9.45,2024-06-08,Falling,9.10,8.60,87,Market Data
+Supramax,Australia,Paradip,9.20,2024-06-15,Falling,8.90,8.40,89,Market Data
+Supramax,Australia,Paradip,8.95,2024-06-22,Stable,8.95,8.50,88,Market Data
+Handysize,US,Vizag,8.75,2024-06-01,Rising,8.90,9.20,82,Market Data
+Handysize,US,Vizag,8.90,2024-06-08,Rising,9.05,9.40,84,Market Data
+Panamax,Mozambique,Gangavaram,11.20,2024-06-01,Stable,11.15,11.10,80,Market Data
+Panamax,Mozambique,Gangavaram,11.15,2024-06-08,Stable,11.10,11.05,81,Market Data
+Capesize,Australia,Haldia,12.50,2024-06-01,Rising,12.75,13.20,79,Market Data
+Capesize,Australia,Haldia,12.75,2024-06-08,Rising,13.00,13.50,81,Market Data

@@ -1,0 +1,5 @@
+vessel_type,typical_capacity_tons,typical_draft_meters,typical_loa_meters,typical_beam_meters,daily_operating_cost_usd,fuel_consumption_tons_per_day,description
+Handysize,35000,8.2,178,26,14000,28,"Flexible, good for smaller ports, lower fuel cost"
+Supramax,62000,9.0,189,30,18000,38,"Sweet spot for East India routes, good efficiency"
+Panamax,80000,10.5,225,32,24000,52,"Larger capacity, premium ports only"
+Capesize,180000,14.0,289,45,38000,95,"Mega carrier, only major ports, high costs"

@@ -1,0 +1,7 @@
+port_name,country,region,max_draft_meters,max_loa_meters,max_beam_meters,cargo_handling_rate_tons_per_day,berthing_capacity,average_turnaround_days
+Paradip,India,East Coast,10.5,225,32,5000,4,4
+Vizag,India,East Coast,11.0,240,33,6000,5,3
+Gangavaram,India,East Coast,9.5,190,28,4000,2,5
+Gopalpur,India,East Coast,9.8,210,30,3500,2,5
+Dhamra,India,East Coast,9.5,200,29,4500,3,4
+Haldia,India,East Coast,8.5,180,26,3000,2,6
