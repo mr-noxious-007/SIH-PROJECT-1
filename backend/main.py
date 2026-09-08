@@ -1,9 +1,16 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Dict, Any
 import random
 
-app = FastAPI(title="FreightIQ API")
+from providers.weather_provider import WeatherProvider
+from providers.macro_provider import MacroProvider
+from providers.vessel_provider import VesselProvider
+from services.freight_service import generate_recommendation
+
+app = FastAPI(title="FreightIQ API Real-Time Hybrid Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,43 +29,25 @@ class CharterQuery(BaseModel):
     contract_type: str
     voyages: int
 
-@app.get("/api/dashboard")
-def get_dashboard():
-    return {
-        "current_rate": 18200,
-        "forecast_7d": 18900,
-        "forecast_14d": 20100,
-        "forecast_30d": 21400,
-        "trend": "Bullish",
-        "congestion_paradip": "30%",
-        "vessel_availability": 142,
-        "savings_opportunity": 420000
-    }
+@app.get("/api/weather/route")
+def get_weather(lat: float = 20.3, lon: float = 86.6):
+    provider = WeatherProvider()
+    return provider.get_route_weather(lat, lon)
+
+@app.get("/api/macro/gdp")
+def get_gdp():
+    provider = MacroProvider()
+    return provider.get_global_gdp_growth()
+
+@app.get("/api/vessels/availability")
+def get_vessels(port: str = "Paradip", vessel_type: str = "Supramax"):
+    provider = VesselProvider()
+    return provider.get_available_vessels(port, vessel_type)
 
 @app.post("/api/chartering/recommend")
 def recommend_charter(query: CharterQuery):
-    # Logic matching SIH Demo prompt constraints exactly
-    is_haldia = query.destination.lower() == "haldia"
-    vessel = "Handysize" if is_haldia else "Panamax" if query.cargo_quantity > 60000 else "Supramax"
-    
-    return {
-        "recommended_vessel": vessel,
-        "recommended_contract": "3-Month Multi-Voyage",
-        "recommended_entry": "Enter within next 5 days",
-        "current_freight_per_day": 18200,
-        "forecast_30d_freight_per_day": 21100,
-        "expected_savings": 233500,
-        "port_compatibility": [
-            {"port": query.loading_port, "compatible": True},
-            {"port": query.destination, "compatible": not is_haldia or vessel == "Handysize"}
-        ],
-        "expected_turnaround": 9.1,
-        "idle_risk": "LOW",
-        "deadheading_risk": "LOW",
-        "market_risk": "MEDIUM",
-        "overall_recommendation": "ENTER MULTI-VOYAGE CONTRACT NOW",
-        "explanation": f"Freight rates are forecast to increase by approximately {(21100-18200)/18200*100:.1f}% over 30 days. Securing a multi-voyage contract shields against market volatility."
-    }
+    result = generate_recommendation(query.dict())
+    return result
 
 @app.get("/api/forecast/comparison")
 def get_forecast_comparison():
