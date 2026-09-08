@@ -14,6 +14,7 @@ export default function CharteringPlanner() {
     });
 
     const [result, setResult] = useState(null);
+    const [vessels, setVessels] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = (e) => {
@@ -22,6 +23,10 @@ export default function CharteringPlanner() {
         axios.post('http://localhost:8000/api/chartering/recommend', formData)
             .then(res => {
                 setResult(res.data);
+                return axios.get(`http://localhost:8000/api/vessels/availability?port=${formData.destination}&type=Supramax`);
+            })
+            .then(res => {
+                setVessels(res.data);
                 setLoading(false);
             })
             .catch(err => {
@@ -136,6 +141,51 @@ export default function CharteringPlanner() {
                     </div>
                 )}
             </div>
+
+            {vessels && (
+                <div className="mt-8 bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                    <h2 className="text-xl uppercase font-bold tracking-wider text-slate-800 mb-6 border-b border-gray-200 pb-3">
+                        Vessel Availability Status: {vessels.status}
+                    </h2>
+                    <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg mb-6 flex justify-between items-center">
+                        <div>
+                            <p className="font-bold">Real-time Data Source: {vessels.source}</p>
+                            <p className="text-sm">Metadata Quality: {vessels.data_quality} | Freq: {vessels.update_frequency}</p>
+                        </div>
+                        <div className="text-right">
+                            {vessels.status === 'UNAVAILABLE' ? (
+                                <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded">API KEY MISSING - FALLBACK MODE</span>
+                            ) : (
+                                <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded">LIVE AIS DATA</span>
+                            )}
+                        </div>
+                    </div>
+                    {vessels.value && vessels.value.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full bg-white text-sm text-left">
+                                <thead className="bg-slate-100 text-slate-600 uppercase">
+                                    <tr>
+                                        <th className="py-3 px-4 font-bold border-b">Vessel Name</th>
+                                        <th className="py-3 px-4 font-bold border-b">Class</th>
+                                        <th className="py-3 px-4 font-bold border-b">Open Position</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {vessels.value.map((v, i) => (
+                                        <tr key={i} className="border-b">
+                                            <td className="py-3 px-4">{v.vessel_name}</td>
+                                            <td className="py-3 px-4">{v.vessel_class}</td>
+                                            <td className="py-3 px-4">{v.open_position}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="text-gray-500 italic p-4 text-center border rounded">No Live Vessels Available or Key Missing.</div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

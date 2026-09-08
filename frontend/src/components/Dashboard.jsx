@@ -40,16 +40,18 @@ export default function Dashboard() {
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-red-500">
                     <p className="text-sm font-medium text-gray-500 uppercase">30-Day Forecast</p>
                     <h2 className="text-3xl font-black text-red-600 mt-2">${data.forecast_30d}</h2>
-                    <p className="text-xs text-gray-400 mt-1 font-semibold">Expected +17.6% Rise</p>
+                    <p className="text-xs text-gray-400 mt-1 font-semibold">{data.trend}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <p className="text-sm font-medium text-gray-500 uppercase">Paradip Congestion</p>
-                    <h2 className="text-3xl font-black text-slate-800 mt-2">{data.congestion_paradip}</h2>
-                    <p className="text-xs text-orange-600 mt-1 font-bold flex items-center"><AlertTriangle size={14} className="mr-1" /> Moderate Delays</p>
+                    <p className="text-sm font-medium text-gray-500 uppercase">Live Data Sources Used</p>
+                    <h2 className="text-md font-black text-slate-800 mt-2">Yahoo Finance (Live)</h2>
+                    <p className="text-xs text-green-600 mt-1 font-bold flex items-center">
+                        Market Indices Proxy
+                    </p>
                 </div>
                 <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-xl shadow-sm text-white">
                     <p className="text-sm font-medium text-green-100 uppercase">Estimated Savings Opp.</p>
-                    <h2 className="text-3xl font-black mt-2">${data.savings_opportunity.toLocaleString()}</h2>
+                    <h2 className="text-3xl font-black mt-2">${data.savings_opportunity?.toLocaleString() || "0"}</h2>
                     <p className="text-xs text-green-100 mt-1">vs Spot Contracts via AI Timing</p>
                 </div>
             </div>
