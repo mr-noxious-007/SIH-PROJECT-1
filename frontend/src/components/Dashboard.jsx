@@ -49,10 +49,22 @@ export default function Dashboard() {
                         Market Indices Proxy
                     </p>
                 </div>
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-xl shadow-sm text-white">
-                    <p className="text-sm font-medium text-green-100 uppercase">Estimated Savings Opp.</p>
-                    <h2 className="text-3xl font-black mt-2">${data.savings_opportunity?.toLocaleString() || "0"}</h2>
-                    <p className="text-xs text-green-100 mt-1">vs Spot Contracts via AI Timing</p>
+                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-xl shadow-sm text-white">
+                    <p className="text-sm font-medium text-indigo-100 uppercase">Model Performance: {data.ml_performance?.model || "N/A"}</p>
+                    <div className="flex justify-between mt-2">
+                        <div>
+                            <p className="text-xs text-indigo-100">MAE</p>
+                            <h2 className="text-xl font-bold">{data.ml_performance?.mae || "N/A"}</h2>
+                        </div>
+                        <div>
+                            <p className="text-xs text-indigo-100">RMSE</p>
+                            <h2 className="text-xl font-bold">{data.ml_performance?.rmse || "N/A"}</h2>
+                        </div>
+                        <div>
+                            <p className="text-xs text-indigo-100">MAPE</p>
+                            <h2 className="text-xl font-bold">{data.ml_performance?.mape || "N/A"}%</h2>
+                        </div>
+                    </div>
                 </div>
             </div>
 

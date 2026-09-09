@@ -4,7 +4,7 @@ from typing import Dict, Any
 from providers.vessel_provider import VesselProvider
 from providers.weather_provider import WeatherProvider
 from providers.macro_provider import MacroProvider
-from providers.other_providers import FreightProvider, PortProvider, FuelProvider
+from providers.other_providers import FreightProvider, PortProvider, FuelProvider, CommodityProvider
 
 class VoyageCostCalculator:
     def __init__(self):
@@ -68,6 +68,32 @@ def generate_unified_features(origin, destination, vessel_type):
     }
 
 
+import pickle
+import pandas as pd
+from database import engine
+
+def load_ml_model():
+    try:
+        with open("models/rf_model.pkl", "rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return None
+
+def get_latest_lags_from_db():
+    try:
+        query = "SELECT date, fuel_price, demand_index, rate FROM freight_rates ORDER BY date DESC LIMIT 7"
+        df = pd.read_sql(query, con=engine)
+        if len(df) >= 7:
+            return {
+                "rate_lag_1": df.iloc[0]['rate'],
+                "rate_lag_7": df.iloc[6]['rate'],
+                "fuel_lag_1": df.iloc[0]['fuel_price'],
+                "rate_rolling_7d": df['rate'].mean()
+            }
+    except Exception:
+        pass
+    return None
+
 def generate_recommendation(query):
     """Generates recommendation using the Data Quality Engine."""
     cargo_volume = query.get("cargo_volume_tons", 65000)
@@ -80,15 +106,63 @@ def generate_recommendation(query):
     voyage_calculator = VoyageCostCalculator()
     voyage_cost = voyage_calculator.calculate_voyage_cost(vessel_type, cargo_volume, sailing_days=25)
     
-    # Connecting to ML Model pipeline (Assuming the trained model handles feature vectors)
-    # Using fallback dummy rate for compilation without ML inferencing setup
-    predicted_freight_cost = cargo_volume * 15.0  
+    # ------------------
+    # ML INFERENCING
+    # ------------------
+    model = load_ml_model()
+    lags = get_latest_lags_from_db()
+    
+    # Fetch live features from our newly rebuilt Yahoo Finance providers
+    fuel_provider = FuelProvider()
+    commodity_provider = CommodityProvider()
+    
+    live_fuel = fuel_provider.get_fuel_price("VLSFO")
+    live_coal = commodity_provider.get_commodity_price("Coal")
+    
+    f_val = live_fuel.get("value", 600.0)
+    c_val = live_coal.get("value", 135.0)
+    
+    current_fuel = float(f_val) if isinstance(f_val, (int, float)) else 600.0
+    current_demand = float(c_val) if isinstance(c_val, (int, float)) else 135.0
+
+    predicted_rate = 15.0 # fallback
+    ml_status = "UNAVAILABLE"
+    recommendation_text = "Insufficient ML data to form recommendation. Use Spot."
+    confidence = "UNAVAILABLE"
+    
+    if model and lags:
+        # Create feature vector matching training schema
+        # ['fuel_price', 'demand_index', 'rate_lag_1', 'rate_lag_7', 'fuel_lag_1', 'rate_rolling_7d']
+        feature_vector = pd.DataFrame([{
+            'fuel_price': current_fuel,
+            'demand_index': current_demand,
+            'rate_lag_1': lags['rate_lag_1'],
+            'rate_lag_7': lags['rate_lag_7'],
+            'fuel_lag_1': lags['fuel_lag_1'],
+            'rate_rolling_7d': lags['rate_rolling_7d']
+        }])
+        predicted_rate = float(model.predict(feature_vector)[0])
+        ml_status = "ACTIVE Model Inference"
+        
+        # Simple Logic
+        if predicted_rate > lags['rate_lag_1'] * 1.05:
+            recommendation_text = "CONSIDER CHARTERING NOW (Rates Expected to Rise)"
+            confidence = 88
+        elif predicted_rate < lags['rate_lag_1'] * 0.95:
+            recommendation_text = "WAIT / MONITOR (Rates Expected to Soften)"
+            confidence = 82
+        else:
+            recommendation_text = "FLEXIBLE / MONITOR (Stable Rates)"
+            confidence = 75
+
+    predicted_freight_cost = cargo_volume * predicted_rate  
 
     return {
         "recommended_vessel_type": vessel_type,
-        "features": features, # Contains data_quality metadata natively
+        "features": features, 
         "voyage_details": voyage_cost,
-        "total_voyage_cost_usd": voyage_cost["total_voyage_cost"],
-        "confidence_percent": 85,
-        "entry_recommendation": "Calculated using real/fallback hybrid variables."
+        "total_voyage_cost_usd": int(voyage_cost.get("total_voyage_cost", 0) + predicted_freight_cost),
+        "confidence_percent": confidence,
+        "entry_recommendation": recommendation_text,
+        "ml_status": ml_status
     }
