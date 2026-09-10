@@ -1,30 +1,37 @@
-def predict_freight_rates(vessel_type, origin, destination, days_ahead=7):
-    """Predict freight rates for given route."""
-    base_rates = {
-        "Handysize": 8.50,
-        "Supramax": 9.50,
-        "Panamax": 11.00,
-        "Capesize": 12.50
-    }
+import os
+from typing import Dict, Any
+
+from providers.vessel_provider import VesselProvider
+from providers.weather_provider import WeatherProvider
+from providers.macro_provider import MacroProvider
+from providers.other_providers import FreightProvider, PortProvider, FuelProvider, CommodityProvider
+
+class VoyageCostCalculator:
+    def __init__(self):
+        self.fuel_provider = FuelProvider()
     
-    base_rate = base_rates.get(vessel_type, 9.50)
-    trend_factor = 0.98 if days_ahead <= 7 else 0.95
-    
-    rate_low = base_rate * trend_factor * 0.92
-    rate_high = base_rate * trend_factor * 1.08
-    
-    confidence = 85 + (10 if days_ahead <= 7 else 5)
-    
-    return {
-        "rate_low": round(rate_low, 2),
-        "rate_high": round(rate_high, 2),
-        "confidence": min(confidence, 95),
-        "trend": "Falling",
-        "entry_window": f"Next {max(1, days_ahead-3)}-{days_ahead} days"
-    }
+    def calculate_voyage_cost(self, vessel_type, cargo_tons, sailing_days):
+        # Fetching near-real-time fuel price
+        fuel_data = self.fuel_provider.get_fuel_price("VLSFO")
+        fuel_price = fuel_data["value"]
+        
+        # Simple daily cost using actual market fuel proxies (vessel config might modify this)
+        daily_cost = 18000 + (fuel_price * 10)  # rough estimation
+        
+        operating_cost = sailing_days * daily_cost
+        positioning_cost = (sailing_days / 2) * daily_cost
+        port_fees = operating_cost * 0.025
+        total_cost = operating_cost + positioning_cost + port_fees
+        
+        return {
+            "total_voyage_cost": int(total_cost),
+            "fuel_price_used": fuel_price,
+            "cost_source": fuel_data["source"]
+        }
+
 
 def check_port_compatibility(vessel_type, destination_port):
-    """Check if vessel can operate at given port"""
+    """Check if vessel can operate at given port (Static Rule Engine)"""
     vessel_specs = {
         "Handysize": {"draft": 8.2, "loa": 178, "beam": 26},
         "Supramax": {"draft": 9.0, "loa": 189, "beam": 30},
@@ -33,110 +40,129 @@ def check_port_compatibility(vessel_type, destination_port):
     }
     port_specs = {
         "Paradip": {"max_draft": 10.5, "max_loa": 225, "max_beam": 32},
-        "Vizag": {"max_draft": 11.0, "max_loa": 240, "max_beam": 33},
-        "Gangavaram": {"max_draft": 9.5, "max_loa": 190, "max_beam": 28},
-        "Gopalpur": {"max_draft": 9.8, "max_loa": 210, "max_beam": 30},
-        "Dhamra": {"max_draft": 9.5, "max_loa": 200, "max_beam": 29},
         "Haldia": {"max_draft": 8.5, "max_loa": 180, "max_beam": 26}
     }
     
-    vessel = vessel_specs.get(vessel_type)
-    port = port_specs.get(destination_port)
-    
-    if not vessel or not port:
-        return {"compatible": False, "compatibility_score": 0}
+    vessel = vessel_specs.get(vessel_type, vessel_specs["Handysize"])
+    port = port_specs.get(destination_port, port_specs["Paradip"])
     
     draft_ok = vessel["draft"] <= port["max_draft"]
-    loa_ok = vessel["loa"] <= port["max_loa"]
-    beam_ok = vessel["beam"] <= port["max_beam"]
+    score = 100 if draft_ok else 0
+    return {"compatible": draft_ok, "compatibility_score": score, "draft_check": f"draft_ok: {draft_ok}"}
+
+
+def generate_unified_features(origin, destination, vessel_type):
+    weather_provider = WeatherProvider()
+    macro_provider = MacroProvider()
+    port_provider = PortProvider()
     
-    compatible = draft_ok and loa_ok and beam_ok
-    score = 0
-    if draft_ok: score += 33
-    if loa_ok: score += 33
-    if beam_ok: score += 34
+    # Example coordinates for weather (Paradip, India)
+    weather_data = weather_provider.get_route_weather(20.3, 86.6)
+    gdp_data = macro_provider.get_global_gdp_growth()
+    port_data = port_provider.get_port_congestion(destination)
     
     return {
-        "compatible": compatible,
-        "draft_ok": draft_ok,
-        "loa_ok": loa_ok,
-        "beam_ok": beam_ok,
-        "compatibility_score": score,
-        "draft_check": f"✓ {vessel['draft']}m <= {port['max_draft']}m" if draft_ok else f"✗ {vessel['draft']}m > {port['max_draft']}m",
-        "loa_check": f"✓ {vessel['loa']}m <= {port['max_loa']}m" if loa_ok else f"✗ {vessel['loa']}m > {port['max_loa']}m",
-        "beam_check": f"✓ {vessel['beam']}m <= {port['max_beam']}m" if beam_ok else f"✗ {vessel['beam']}m > {port['max_beam']}m"
+        "weather_risk_index": weather_data,
+        "global_gdp_growth": gdp_data,
+        "port_congestion_index": port_data
     }
 
-def calculate_voyage_cost(vessel_type, cargo_tons, sailing_days, daily_cost):
-    """Calculate total voyage cost"""
-    operating_cost = sailing_days * daily_cost
-    positioning_cost = (sailing_days / 2) * daily_cost
-    port_fees = operating_cost * 0.025
-    insurance = (operating_cost + positioning_cost) * 0.01
-    total_cost = operating_cost + positioning_cost + port_fees + insurance
-    
-    return {
-        "operating_cost": int(operating_cost),
-        "positioning_cost": int(positioning_cost),
-        "port_fees": int(port_fees),
-        "insurance": int(insurance),
-        "total_voyage_cost": int(total_cost),
-        "cost_per_ton": round(total_cost / cargo_tons, 2)
-    }
+
+import pickle
+import pandas as pd
+from database import engine
+
+def load_ml_model():
+    try:
+        with open("models/rf_model.pkl", "rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return None
+
+def get_latest_lags_from_db():
+    try:
+        query = "SELECT date, fuel_price, demand_index, rate FROM freight_rates ORDER BY date DESC LIMIT 7"
+        df = pd.read_sql(query, con=engine)
+        if len(df) >= 7:
+            return {
+                "rate_lag_1": df.iloc[0]['rate'],
+                "rate_lag_7": df.iloc[6]['rate'],
+                "fuel_lag_1": df.iloc[0]['fuel_price'],
+                "rate_rolling_7d": df['rate'].mean()
+            }
+    except Exception:
+        pass
+    return None
 
 def generate_recommendation(query):
-    """Main function: Analyze query and generate recommendation"""
+    """Generates recommendation using the Data Quality Engine."""
     cargo_volume = query.get("cargo_volume_tons", 65000)
     origin = query.get("origin_port", "Australia")
     destination = query.get("destination_port", "Paradip")
-    budget = query.get("budget_usd", 2500000)
+    vessel_type = "Supramax"
     
-    rates = predict_freight_rates("Supramax", origin, destination, days_ahead=7)
-    compat = check_port_compatibility("Supramax", destination)
+    features = generate_unified_features(origin, destination, vessel_type)
     
-    voyage_cost = calculate_voyage_cost(
-        "Supramax",
-        cargo_volume,
-        sailing_days=25,
-        daily_cost=18000
-    )
+    voyage_calculator = VoyageCostCalculator()
+    voyage_cost = voyage_calculator.calculate_voyage_cost(vessel_type, cargo_volume, sailing_days=25)
     
-    spot_rate_per_ton = 15.00
-    spot_cost = cargo_volume * spot_rate_per_ton
+    # ------------------
+    # ML INFERENCING
+    # ------------------
+    model = load_ml_model()
+    lags = get_latest_lags_from_db()
     
-    predicted_rate = (rates["rate_low"] + rates["rate_high"]) / 2
-    predicted_freight_cost = cargo_volume * predicted_rate
-    total_predicted_cost = predicted_freight_cost + voyage_cost["total_voyage_cost"]
+    # Fetch live features from our newly rebuilt Yahoo Finance providers
+    fuel_provider = FuelProvider()
+    commodity_provider = CommodityProvider()
     
-    savings_usd = spot_cost - total_predicted_cost
-    savings_percent = (savings_usd / spot_cost) * 100 if spot_cost > 0 else 0
+    live_fuel = fuel_provider.get_fuel_price("VLSFO")
+    live_coal = commodity_provider.get_commodity_price("Coal")
     
-    return {
-        "recommended_vessel_type": "Supramax",
-        "predicted_rate_low": rates["rate_low"],
-        "predicted_rate_high": rates["rate_high"],
-        "best_entry_window": rates["entry_window"],
-        "estimated_savings_percent": round(savings_percent, 1),
-        "estimated_savings_usd": int(savings_usd),
-        "port_compatibility_score": compat.get("compatibility_score", 0),
-        "draft_check": compat.get("draft_check"),
-        "loa_check": compat.get("loa_check"),
-        "beam_check": compat.get("beam_check"),
-        "estimated_idle_days": 2,
-        "total_voyage_cost_usd": voyage_cost["total_voyage_cost"],
-        "vs_spot_price_usd": int(spot_cost),
-        "confidence_percent": rates["confidence"],
-        "entry_recommendation": "Book within next 7 days to lock in low rates"
-    }
+    f_val = live_fuel.get("value", 600.0)
+    c_val = live_coal.get("value", 135.0)
+    
+    current_fuel = float(f_val) if isinstance(f_val, (int, float)) else 600.0
+    current_demand = float(c_val) if isinstance(c_val, (int, float)) else 135.0
 
-if __name__ == "__main__":
-    import json
-    query = {
-        "cargo_type": "Coal",
-        "cargo_volume_tons": 65000,
-        "origin_port": "Australia",
-        "destination_port": "Paradip",
-        "budget_usd": 2500000,
-        "contract_duration_days": 90
+    predicted_rate = 15.0 # fallback
+    ml_status = "UNAVAILABLE"
+    recommendation_text = "Insufficient ML data to form recommendation. Use Spot."
+    confidence = "UNAVAILABLE"
+    
+    if model and lags:
+        # Create feature vector matching training schema
+        # ['fuel_price', 'demand_index', 'rate_lag_1', 'rate_lag_7', 'fuel_lag_1', 'rate_rolling_7d']
+        feature_vector = pd.DataFrame([{
+            'fuel_price': current_fuel,
+            'demand_index': current_demand,
+            'rate_lag_1': lags['rate_lag_1'],
+            'rate_lag_7': lags['rate_lag_7'],
+            'fuel_lag_1': lags['fuel_lag_1'],
+            'rate_rolling_7d': lags['rate_rolling_7d']
+        }])
+        predicted_rate = float(model.predict(feature_vector)[0])
+        ml_status = "ACTIVE Model Inference"
+        
+        # Simple Logic
+        if predicted_rate > lags['rate_lag_1'] * 1.05:
+            recommendation_text = "CONSIDER CHARTERING NOW (Rates Expected to Rise)"
+            confidence = 88
+        elif predicted_rate < lags['rate_lag_1'] * 0.95:
+            recommendation_text = "WAIT / MONITOR (Rates Expected to Soften)"
+            confidence = 82
+        else:
+            recommendation_text = "FLEXIBLE / MONITOR (Stable Rates)"
+            confidence = 75
+
+    predicted_freight_cost = cargo_volume * predicted_rate  
+
+    return {
+        "recommended_vessel_type": vessel_type,
+        "features": features, 
+        "voyage_details": voyage_cost,
+        "total_voyage_cost_usd": int(voyage_cost.get("total_voyage_cost", 0) + predicted_freight_cost),
+        "confidence_percent": confidence,
+        "entry_recommendation": recommendation_text,
+        "ml_status": ml_status
     }
-    print(json.dumps(generate_recommendation(query), indent=2))

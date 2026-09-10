@@ -39,3 +39,32 @@ class FreightRate(Base):
     fuel_price = Column(Float)
     demand_index = Column(Float)
     supply_index = Column(Float)
+
+class DataSource(Base):
+    __tablename__ = "data_sources"
+    id = Column(Integer, primary_key=True, index=True)
+    provider_name = Column(String, index=True)
+    status = Column(String)
+    last_update = Column(Date)
+    data_quality = Column(String)
+
+class ForecastFeature(Base):
+    __tablename__ = "forecast_features"
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True)
+    route = Column(String)
+    cargo_demand_index = Column(Float)
+    vessel_supply_index = Column(Float)
+    weather_risk_index = Column(Float)
+    port_congestion_index = Column(Float)
+    global_gdp_growth = Column(Float)
+
+class VesselAvailability(Base):
+    __tablename__ = "vessel_availability"
+    id = Column(Integer, primary_key=True, index=True)
+    vessel_name = Column(String)
+    vessel_class = Column(String)
+    open_position = Column(String)
+    port = Column(String, index=True)
+    source = Column(String)
+    data_quality = Column(String)

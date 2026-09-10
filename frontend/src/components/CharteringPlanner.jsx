@@ -14,6 +14,7 @@ export default function CharteringPlanner() {
     });
 
     const [result, setResult] = useState(null);
+    const [vessels, setVessels] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = (e) => {
@@ -22,6 +23,10 @@ export default function CharteringPlanner() {
         axios.post('http://localhost:8000/api/chartering/recommend', formData)
             .then(res => {
                 setResult(res.data);
+                return axios.get(`http://localhost:8000/api/vessels/availability?port=${formData.destination}&type=Supramax`);
+            })
+            .then(res => {
+                setVessels(res.data);
                 setLoading(false);
             })
             .catch(err => {
@@ -87,62 +92,100 @@ export default function CharteringPlanner() {
                         <div className="space-y-4">
                             <div className="flex justify-between items-center bg-blue-800/30 p-4 rounded-lg border border-blue-600/30">
                                 <span className="text-blue-100 font-medium tracking-wide text-sm uppercase">Recommended Vessel Type</span>
-                                <span className="text-3xl font-black text-white">{result.recommended_vessel}</span>
-                            </div>
-
-                            <div className="flex justify-between items-center pb-2 border-b border-blue-800/50">
-                                <span className="text-gray-300">Contract Strategy Required:</span>
-                                <span className="font-bold text-white bg-blue-600 px-3 py-1 rounded">{result.recommended_contract}</span>
+                                <span className="text-3xl font-black text-white">{result.recommended_vessel_type}</span>
                             </div>
 
                             <div className="flex justify-between items-center pb-2 border-b border-blue-800/50">
                                 <span className="text-gray-300">Market Entry Timing:</span>
-                                <span className="font-bold text-red-300 animate-pulse">{result.recommended_entry}</span>
+                                <span className="font-bold text-red-300 animate-pulse">{result.entry_recommendation}</span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6 py-4">
-                                <div>
-                                    <p className="text-sm text-gray-400 mb-1">Current Spot Freight</p>
-                                    <p className="text-2xl font-bold">${result.current_freight_per_day}/day</p>
+                            <div className="flex justify-between items-center pb-2 border-b border-blue-800/50">
+                                <span className="text-gray-300">Confidence Metric:</span>
+                                <span className="font-bold text-emerald-400">{result.confidence_percent}%</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-black/30 p-4 rounded-lg">
+                                    <p className="text-xs text-gray-400 mb-1">Weather Risk</p>
+                                    <p className="text-lg font-bold">{result.features?.weather_risk_index?.value || "N/A"}</p>
+                                    <p className="text-[10px] text-gray-500 mt-1 uppercase text-right border-t border-gray-700 pt-1">
+                                        {result.features?.weather_risk_index?.status} - {result.features?.weather_risk_index?.source}
+                                    </p>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-gray-400 mb-1">Forecast 30-Day Rate</p>
-                                    <p className="text-2xl font-bold text-red-400">${result.forecast_30d_freight_per_day}/day</p>
+                                <div className="bg-black/30 p-4 rounded-lg">
+                                    <p className="text-xs text-gray-400 mb-1">Port Congestion (Dest)</p>
+                                    <p className="text-lg font-bold">{result.features?.port_congestion_index?.value}%</p>
+                                    <p className="text-[10px] text-gray-500 mt-1 uppercase text-right border-t border-gray-700 pt-1">
+                                        {result.features?.port_congestion_index?.status} - {result.features?.port_congestion_index?.source}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-black/30 p-4 rounded-lg">
+                                    <p className="text-xs text-gray-400 mb-1">Global GDP Data</p>
+                                    <p className="text-lg font-bold">{result.features?.global_gdp_growth?.value}% Growth</p>
+                                    <p className="text-[10px] text-gray-500 mt-1 uppercase text-right border-t border-gray-700 pt-1">
+                                        {result.features?.global_gdp_growth?.status} - {result.features?.global_gdp_growth?.source}
+                                    </p>
                                 </div>
                             </div>
 
                             <div className="bg-gradient-to-r from-emerald-600 to-green-600 border border-green-500 p-6 rounded-xl my-4 text-center shadow-lg">
-                                <p className="text-sm text-green-100 uppercase tracking-widest mb-1">Expected M-V Contract Savings</p>
-                                <p className="text-5xl font-black text-white">${result.expected_savings.toLocaleString()}</p>
-                                <p className="text-xs text-green-200 mt-2">Versus booking reactive spot charters for {(formData.voyages)} voyages.</p>
+                                <p className="text-sm text-green-100 uppercase tracking-widest mb-1">Est. Voyage Cost (Powered by live Fuel Price proxies)</p>
+                                <p className="text-5xl font-black text-white">${(result.total_voyage_cost_usd || 0).toLocaleString()}</p>
+                                <p className="text-xs text-green-200 mt-2">Fuel calculation methodology based on {result.voyage_details?.cost_source}</p>
                             </div>
-
-                            <div className="pt-2">
-                                <p className="text-sm font-bold tracking-wider uppercase text-gray-400 mb-3">Target Port Compatibility Matrix</p>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {result.port_compatibility.map((p, i) => (
-                                        <div key={i} className={`flex items-center p-3 rounded-lg border ${p.compatible ? 'bg-green-900/40 border-green-700/50 text-green-300' : 'bg-red-900/40 border-red-700/50 text-red-300'}`}>
-                                            {p.compatible ? <CheckCircle className="mr-2" size={18} /> : <XCircle className="mr-2" size={18} />}
-                                            <div>
-                                                <p className="text-xs text-gray-400 uppercase">{i === 0 ? 'Loading' : 'Destination'}</p>
-                                                <p className="font-bold">{p.port}</p>
-                                                <p className="text-xs mt-1">{p.compatible ? 'Safe Draft Specs' : 'INCOMPATIBLE VESSEL MAX DRAFT'}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="mt-6 p-5 bg-black/40 rounded-xl border border-slate-700 h-full flex flex-col justify-center">
-                                <p className="text-xs uppercase text-blue-400 font-bold mb-2 flex items-center">Overall Engine Recommendation</p>
-                                <p className="text-xl font-bold text-white mb-2">{result.overall_recommendation}</p>
-                                <p className="text-sm text-gray-300 leading-relaxed italic border-l-4 border-blue-500 pl-3">" {result.explanation} "</p>
-                            </div>
-
                         </div>
                     </div>
                 )}
             </div>
+
+            {vessels && (
+                <div className="mt-8 bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                    <h2 className="text-xl uppercase font-bold tracking-wider text-slate-800 mb-6 border-b border-gray-200 pb-3">
+                        Vessel Availability Status: {vessels.status}
+                    </h2>
+                    <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg mb-6 flex justify-between items-center">
+                        <div>
+                            <p className="font-bold">Real-time Data Source: {vessels.source}</p>
+                            <p className="text-sm">Metadata Quality: {vessels.data_quality} | Freq: {vessels.update_frequency}</p>
+                        </div>
+                        <div className="text-right">
+                            {vessels.status === 'UNAVAILABLE' ? (
+                                <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded">API KEY MISSING - FALLBACK MODE</span>
+                            ) : (
+                                <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded">LIVE AIS DATA</span>
+                            )}
+                        </div>
+                    </div>
+                    {vessels.value && vessels.value.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full bg-white text-sm text-left">
+                                <thead className="bg-slate-100 text-slate-600 uppercase">
+                                    <tr>
+                                        <th className="py-3 px-4 font-bold border-b">Vessel Name</th>
+                                        <th className="py-3 px-4 font-bold border-b">Class</th>
+                                        <th className="py-3 px-4 font-bold border-b">Open Position</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {vessels.value.map((v, i) => (
+                                        <tr key={i} className="border-b">
+                                            <td className="py-3 px-4">{v.vessel_name}</td>
+                                            <td className="py-3 px-4">{v.vessel_class}</td>
+                                            <td className="py-3 px-4">{v.open_position}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="text-gray-500 italic p-4 text-center border rounded">No Live Vessels Available or Key Missing.</div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
